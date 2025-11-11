@@ -1,0 +1,198 @@
+
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>حاسبة البيض والعلف - المزرعة</title>
+<style>
+  body{font-family: "Segoe UI", Tahoma, Arial; max-width:900px;margin:20px auto;padding:20px;background:#f7f7f7;color:#222}
+  h1{margin-bottom:5px}
+  .card{background:#fff;padding:18px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.06);margin-bottom:12px}
+  label{display:block;margin:8px 0 4px}
+  input[type="number"], select{width:100%;padding:10px;border:1px solid #ddd;border-radius:6px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .col{flex:1;min-width:150px}
+  button{background:#007bff;color:#fff;border:none;padding:10px 14px;border-radius:6px;cursor:pointer}
+  .result{font-size:1.05rem;margin-top:12px;padding:12px;background:#eef9ff;border-radius:6px}
+  small{color:#666}
+  .inline{display:flex;gap:8px;align-items:center}
+  textarea{width:100%;height:120px;padding:10px;border-radius:6px;border:1px solid #ddd}
+  .muted{color:#666;font-size:0.95rem}
+  footer{margin-top:18px;color:#666;font-size:0.9rem}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>حاسبة البيض والعلف</h1>
+  <p class="muted">دخل عدد الدجاجة واختار السلالة، والحاسبة تعطيك عدد البيض اليومي وكميّة العلف اللازمة.</p>
+</div>
+
+<div class="card">
+  <label>عدد الدجاجات البياضة</label>
+  <input id="hens" type="number" min="0" value="20">
+
+  <label>اختار السلالة</label>
+  <select id="breedSelect"></select>
+
+  <div class="row" style="margin-top:10px">
+    <div class="col">
+      <label>سعر البيضة (اختياري) — درهم</label>
+      <input id="price" type="number" min="0" step="0.01" value="2.5">
+    </div>
+    <div class="col">
+      <label>حساب على فترة</label>
+      <select id="period">
+        <option value="1">يومي</option>
+        <option value="7">أسبوعي</option>
+        <option value="30">شهري (شهر ≈ 30 يوم)</option>
+      </select>
+    </div>
+  </div>
+
+  <div style="margin-top:12px" class="inline">
+    <button id="calcBtn">حسب الآن</button>
+    <button id="exportCsv" style="background:#28a745">تصدير CSV</button>
+    <button id="addBreed" style="background:#6c757d">أضف سلالة</button>
+  </div>
+
+  <div id="result" class="result" style="display:none"></div>
+</div>
+
+<div class="card" id="customBreedCard" style="display:none">
+  <h3>أضف سلالة جديدة</h3>
+  <label>اسم السلالة</label>
+  <input id="newName" type="text" placeholder="مثال: بلدي محسّن">
+  <label>نسبة وضع البيض لكل دجاجة (بيضة في اليوم = 1.0 ؛ 0.8 = 80%)</label>
+  <input id="newLay" type="number" min="0" max="1" step="0.01" value="0.8">
+  <label>كمية العلف لكل دجاجة باليوم (غرام)</label>
+  <input id="newFeed" type="number" min="0" step="1" value="120">
+  <div style="margin-top:10px" class="inline">
+    <button id="saveBreed" style="background:#007bff">خزن السلالة</button>
+    <button id="cancelBreed" style="background:#dc3545">إلغاء</button>
+  </div>
+</div>
+
+<div class="card">
+  <h3>معلومات عن السلالات المضمّنة</h3>
+  <div id="breedInfo"></div>
+</div>
+
+<footer>هذه الحاسبة تعطي نتائج تقريبية. يمكن تعديل السلالات حسب تجربتك الواقعية.</footer>
+
+<script>
+const defaultBreeds = [
+  {id:'baladi', name:'دجاج بلدي (محسّن)', lay:0.7, feed:110},
+  {id:'baladi_maroc', name:'دجاج بلدي مغربي عادي', lay:0.55, feed:100},
+  {id:'isa', name:'ISA Brown', lay:0.9, feed:115},
+  {id:'lohmann', name:'Lohmann Brown', lay:0.88, feed:115},
+  {id:'hyline', name:'Hy-Line', lay:0.9, feed:120},
+  {id:'australorp', name:'Australorp', lay:0.75, feed:120},
+  {id:'leghorn', name:'Leghorn', lay:0.95, feed:110},
+  {id:'brahma', name:'Brahma', lay:0.5, feed:160}
+];
+
+let breeds = JSON.parse(localStorage.getItem('breeds_v1')) || defaultBreeds.slice();
+function saveBreeds(){ localStorage.setItem('breeds_v1', JSON.stringify(breeds)); }
+
+function populateBreeds(){
+  const sel = document.getElementById('breedSelect');
+  sel.innerHTML = '';
+  breeds.forEach(b=>{
+    const o = document.createElement('option');
+    o.value = b.id;
+    o.textContent = b.name;
+    sel.appendChild(o);
+  });
+  renderBreedInfo();
+}
+function renderBreedInfo(){
+  const div = document.getElementById('breedInfo');
+  div.innerHTML = '<ul>';
+  breeds.forEach(b=>{
+    div.innerHTML += `<li><strong>${b.name}</strong> — معدل وضع: ${(b.lay*100).toFixed(0)}%، علف/يوم: ${b.feed} غ.</li>`;
+  });
+  div.innerHTML += '</ul>';
+}
+
+populateBreeds();
+
+document.getElementById('calcBtn').addEventListener('click', ()=> {
+  const hens = Number(document.getElementById('hens').value) || 0;
+  const breedId = document.getElementById('breedSelect').value;
+  const periodDays = Number(document.getElementById('period').value);
+  const price = Number(document.getElementById('price').value) || 0;
+
+  const breed = breeds.find(b=>b.id===breedId);
+  if(!breed){ alert('اختار سلالة صالحة'); return; }
+
+  const eggsPerHenPerDay = breed.lay;
+  const eggsTotal = hens * eggsPerHenPerDay * periodDays;
+  const feedTotalGr = hens * breed.feed * periodDays;
+  const feedTotalKg = feedTotalGr / 1000;
+  const income = eggsTotal * price;
+
+  const resultDiv = document.getElementById('result');
+  resultDiv.style.display = 'block';
+  resultDiv.innerHTML = `
+    <strong>النتائج (${ periodDays } يوم):</strong>
+    <ul>
+      <li>عدد الدجاجات: <strong>${hens}</strong></li>
+      <li>معدل وضع البيض لكل دجاجة/يوم: <strong>${(eggsPerHenPerDay).toFixed(2)}</strong> (${(eggsPerHenPerDay*100).toFixed(0)}%).</li>
+      <li>عدد البيض المتوقع: <strong>${eggsTotal.toFixed(2)}</strong> بيضة.</li>
+      <li>مجموع العلف اللازم: <strong>${feedTotalGr.toLocaleString()} غ (${feedTotalKg.toFixed(2)} كغ)</strong>.</li>
+      <li>الدخل المتوقع: <strong>${income.toFixed(2)} درهم</strong>.</li>
+    </ul>`;
+});
+
+document.getElementById('addBreed').addEventListener('click', ()=>{
+  document.getElementById('customBreedCard').style.display = 'block';
+});
+document.getElementById('cancelBreed').addEventListener('click', ()=>{
+  document.getElementById('customBreedCard').style.display = 'none';
+});
+document.getElementById('saveBreed').addEventListener('click', ()=>{
+  const name = document.getElementById('newName').value.trim();
+  const lay = parseFloat(document.getElementById('newLay').value);
+  const feed = parseFloat(document.getElementById('newFeed').value);
+  if(!name || isNaN(lay) || isNaN(feed)){ alert('عمر جميع الخانات بشكل صحيح'); return; }
+  const id = name.toLowerCase().replace(/\s+/g,'_') + '_' + Date.now().toString().slice(-4);
+  breeds.push({id, name, lay, feed});
+  saveBreeds();
+  populateBreeds();
+  document.getElementById('customBreedCard').style.display = 'none';
+});
+
+document.getElementById('exportCsv').addEventListener('click', ()=>{
+  const hens = Number(document.getElementById('hens').value) || 0;
+  const breedId = document.getElementById('breedSelect').value;
+  const periodDays = Number(document.getElementById('period').value);
+  const price = Number(document.getElementById('price').value) || 0;
+  const breed = breeds.find(b=>b.id===breedId);
+  if(!breed){ alert('اختار سلالة صالحة'); return; }
+  const eggsPerHenPerDay = breed.lay;
+  const eggsTotal = hens * eggsPerHenPerDay * periodDays;
+  const feedTotalGr = hens * breed.feed * periodDays;
+  const feedTotalKg = feedTotalGr / 1000;
+  const income = eggsTotal * price;
+
+  const csvLines = [
+    ['التاريخ','عدد الدجاجات','السلالة','ايام','بيض متوقع (بيضة)','علف (غ)','علف (كغ)','دخل متوقع (درهم)'],
+    [new Date().toLocaleString(),hens, breed.name, periodDays, eggsTotal.toFixed(2), feedTotalGr.toFixed(0), feedTotalKg.toFixed(2), income.toFixed(2)]
+  ];
+  const csvContent = csvLines.map(r=>r.map(c=>`"${c}"`).join(',')).join('\n');
+  const blob = new Blob([csvContent], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'chicken_report.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('breedSelect').value = breeds[0].id;
+</script>
+</body>
+</html>
